@@ -109,21 +109,45 @@ namespace Arbitrary.Scalpel
     [Identifier("icmp")]
     public sealed class ICMPv4Packet : InternetPacket
     {
-        public byte Type
+        [Identifier("typecode")]
+        public ICMPv4TypeCode TypeCode
         {
-            get => Segment.Span[0];
+            get => BitConverter
+                .ToUInt16(Segment
+                    .Slice(0x02, sizeof(ushort))
+                    .Span);
         }
 
-        public byte Code
-        {
-            get => Segment.Span[1];
-        }
-
+        [Identifier("checksum")]
         public ushort Checksum
         {
             get => BitConverter
                 .ToUInt16(Segment
                     .Slice(0x02, sizeof(ushort))
+                    .Span)
+                .ByteSwap();
+        }
+
+        [Identifier("rest_of_header")]
+        public ReadOnlyMemory<byte> RestOfHeader
+        {
+            get => Segment.Slice(0x04, 0x04);
+        }
+
+        [Identifier("id")]
+        public ushort Identifier
+        {
+            get => BitConverter
+                .ToUInt16(RestOfHeader.Span)
+                .ByteSwap();
+        }
+
+        [Identifier("sequence")]
+        public ushort Sequence
+        {
+            get => BitConverter
+                .ToUInt16(Segment
+                    .Slice(0x06, sizeof(ushort))
                     .Span)
                 .ByteSwap();
         }
