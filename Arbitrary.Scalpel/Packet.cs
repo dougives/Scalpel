@@ -94,7 +94,7 @@ namespace Arbitrary.Scalpel
     }
 
     [Flags]
-    public enum IPv4Flag : byte
+    public enum IPv4Flags : byte
     {
         [Identifier("zero")]
         Zero =              0b000,
@@ -106,32 +106,196 @@ namespace Arbitrary.Scalpel
         Evil =              0b100,
     }
 
+    [Flags]
+    [IdentifierAuto]
+    public enum TCPFlags : ushort
+    {
+        None =      0b000_000000000,
+        FIN =       0b000_000000001,
+        SYN =       0b000_000000010,
+        RST =       0b000_000000100,
+        PSH =       0b000_000001000,
+        ACK =       0b000_000010000,
+        URG =       0b000_000100000,
+        ECE =       0b000_001000000,
+        CWR =       0b000_010000000,
+        NS =        0b000_100000000,
+        RSVD0 =     0b001_000000000,
+        RSVD1 =     0b010_000000000,
+        RSVD2 =     0b100_000000000,
+        All =       0b111_111111111,
+    }
+
+    public sealed class UDPPacket : TransportPacket
+    {
+        protected override int MinimumHeaderLength => 0x08;
+
+        public override ushort Source
+        {
+            get => BitConverter
+                .ToUInt16(Data.Span)
+                .ByteSwap();
+        }
+
+        public override ushort Destination
+        {
+            get => BitConverter
+                .ToUInt16(Data
+                    .Slice(0x02).Span)
+                .ByteSwap();
+        }
+
+        public ushort Length
+        {
+            get => BitConverter
+                .ToUInt16(Data
+                    .Slice(0x04).Span)
+                .ByteSwap();
+        }
+
+        public override ushort Checksum
+        {
+            get => BitConverter
+                .ToUInt16(Data
+                    .Slice(0x06).Span)
+                .ByteSwap();
+        }
+
+        public UDPPacket(ReadOnlyMemory<byte> data)
+            : base(data)
+        { }
+    }
+
+    public sealed class TCPPacket : TransportPacket
+    {
+        protected override int MinimumHeaderLength => 0x14;
+
+        public override ushort Source
+        {
+            get => BitConverter
+                .ToUInt16(Data.Span)
+                .ByteSwap();
+        }
+
+        public override ushort Destination
+        {
+            get => BitConverter
+                .ToUInt16(Data
+                    .Slice(0x02).Span)
+                .ByteSwap();
+        }
+
+        [Identifier("sequence")]
+        public uint Sequence
+        {
+            get => BitConverter
+                .ToUInt32(Data
+                    .Slice(0x04).Span)
+                .ByteSwap();
+        }
+
+        [Identifier("ack")]
+        public uint Acknowledgment
+        {
+            get => BitConverter
+                .ToUInt32(Data
+                    .Slice(0x04).Span)
+                .ByteSwap();
+        }
+
+        [Identifier("data_offset")]
+        public byte DataOffset
+        {
+            get => (byte)(Data.Span[0x0c]>>0x04);
+        }
+
+        [Identifier("header_length")]
+        public int HeaderLength
+        {
+            get => DataOffset * sizeof(int);
+        }
+
+        [Identifier("flags")]
+        public TCPFlags Flags
+        {
+            get => (TCPFlags)(BitConverter
+                .ToUInt16(Data
+                    .Slice(0x0c).Span)
+                & (ushort)TCPFlags.All);
+        }
+
+        [Identifier("window")]
+        public ushort WindowSize
+        {
+            get => BitConverter
+                .ToUInt16(Data
+                    .Slice(0x0e).Span)
+                .ByteSwap();
+        }
+
+        public override ushort Checksum
+        {
+            get => BitConverter
+                .ToUInt16(Data
+                    .Slice(0x10).Span)
+                .ByteSwap();
+        }
+
+        [Identifier("urgent_pointer")]
+        public ushort UrgentPointer
+        {
+            get => BitConverter
+                .ToUInt16(Data
+                    .Slice(0x12).Span)
+                .ByteSwap();
+        }
+
+        public TCPPacket(ReadOnlyMemory<byte> data)
+            : base(data)
+        { }
+    }
+
+    public abstract class TransportPacket : Packet
+    {
+        [Identifier("port")]
+        [Identifier("source")]
+        public abstract ushort Source { get; }
+        [Identifier("port")]
+        [Identifier("dest")]
+        public abstract ushort Destination { get; }
+        [Identifier("checksum")]
+        public abstract ushort Checksum { get; }
+
+        protected TransportPacket(ReadOnlyMemory<byte> data)
+            : base(data)
+        { }
+    }
+
     [Identifier("icmp")]
     public sealed class ICMPv4Packet : InternetPacket
     {
+        protected override int MinimumHeaderLength => 0x08;
+
         [Identifier("typecode")]
         public ICMPv4TypeCode TypeCode
         {
             get => BitConverter
-                .ToUInt16(Segment
-                    .Slice(0x02, sizeof(ushort))
-                    .Span);
+                .ToUInt16(Data.Span);
         }
 
         [Identifier("checksum")]
         public ushort Checksum
         {
             get => BitConverter
-                .ToUInt16(Segment
-                    .Slice(0x02, sizeof(ushort))
-                    .Span)
+                .ToUInt16(Data
+                    .Slice(0x02).Span)
                 .ByteSwap();
         }
 
         [Identifier("rest_of_header")]
         public ReadOnlyMemory<byte> RestOfHeader
         {
-            get => Segment.Slice(0x04, 0x04);
+            get => Data.Slice(0x04, 0x04);
         }
 
         [Identifier("id")]
@@ -146,21 +310,20 @@ namespace Arbitrary.Scalpel
         public ushort Sequence
         {
             get => BitConverter
-                .ToUInt16(Segment
-                    .Slice(0x06, sizeof(ushort))
-                    .Span)
+                .ToUInt16(Data
+                    .Slice(0x06).Span)
                 .ByteSwap();
         }
 
-        public ICMPv4Packet(ReadOnlyMemory<byte> segment)
-            : base(segment)
+        public ICMPv4Packet(ReadOnlyMemory<byte> data)
+            : base(data)
         { }
     }
 
     [Identifier("ipv4")]
     public sealed class IPv4Packet : IPPacket
     {
-        private const int MinimumHeaderLength = 0x14;
+        protected override int MinimumHeaderLength => 0x14;
 
         public override int HeaderLength
         {
@@ -169,78 +332,76 @@ namespace Arbitrary.Scalpel
         [Identifier("ihl")]
         public byte InternetHeaderLength 
         {
-            get => unchecked((byte)(Segment.Span[0] & 0x0f));
+            get => unchecked((byte)(Data.Span[0] & 0x0f));
         }
         public override byte TrafficClass
         {
-            get => Segment.Span[0x01];
+            get => Data.Span[0x01];
         }
         [Identifier("total_length")]
         public uint TotalLength
         { 
             get => BitConverter
-                .ToUInt16(Segment
-                    .Slice(0x02, sizeof(ushort))
-                    .Span)
+                .ToUInt16(Data
+                    .Slice(0x02).Span)
                 .ByteSwap();
         }
         [Identifier("id")]
         public ushort Identification
         {
             get => BitConverter
-                .ToUInt16(Segment
-                    .Slice(0x04, sizeof(ushort))
-                    .Span)
+                .ToUInt16(Data
+                    .Slice(0x04).Span)
                 .ByteSwap();
         }
         [Identifier("flags")]
-        public IPv4Flag Flags
+        public IPv4Flags Flags
         {
-            get => (IPv4Flag)(Segment.Span[0x06]>>0x05);
+            get => (IPv4Flags)(Data.Span[0x06]>>0x05);
         }
         [Identifier("frag_offset")]
         public ushort FragmentOffset
         {
             get => unchecked((ushort)(BitConverter
-                .ToUInt16(Segment
-                    .Slice(0x04, sizeof(ushort))
-                    .Span) & 0b0001111111111111)
+                .ToUInt16(Data
+                    .Slice(0x04).Span) & 0b0001111111111111)
                 .ByteSwap());
         }
         public override byte TimeToLive
         {
-            get => Segment.Span[0x08];
+            get => Data.Span[0x08];
         }
         public override ProtocolType Protocol 
         { 
-            get => (ProtocolType)Segment.Span[0x09];
+            get => (ProtocolType)Data.Span[0x09];
         }
+        [Identifier("checksum")]
         public ushort Checksum
         {
             get => BitConverter
-                .ToUInt16(Segment
-                    .Slice(0x0a, sizeof(ushort))
-                    .Span)
+                .ToUInt16(Data
+                    .Slice(0x0a).Span)
                 .ByteSwap();
         }
         public override IPAddress Source 
         {
             get => new IPAddress(BitConverter
-                .ToInt32(Segment
-                    .Slice(0x0c, sizeof(int))
-                    .Span));
+                .ToInt32(Data
+                    .Slice(0x0c).Span));
         }
         public override IPAddress Destination 
         {
             get => new IPAddress(BitConverter
-                .ToInt32(Segment
-                    .Slice(0x10, sizeof(int))
-                    .Span));
+                .ToInt32(Data
+                    .Slice(0x10).Span));
         }
         
-        public IPv4Packet(Memory<byte> segment)
-            : base(segment)
-        { }
+        public IPv4Packet(ReadOnlyMemory<byte> data)
+            : base(data)
+        { 
+            if (data.Length < MinimumHeaderLength)
+                throw new ArgumentException(nameof(data));
+        }
     }
 
     [Identifier("ip")]
@@ -249,7 +410,7 @@ namespace Arbitrary.Scalpel
         [Identifier("version")]
         public IPVersion Version 
         { 
-            get => (IPVersion)(Segment.Span[0]>>4); 
+            get => (IPVersion)(Data.Span[0]>>0x04); 
         }
         [Identifier("header_length")]
         public abstract int HeaderLength { get; }
@@ -265,30 +426,31 @@ namespace Arbitrary.Scalpel
         [Identifier("ttl")]
         public abstract byte TimeToLive { get; }
         public byte HopLimit => TimeToLive;
+        [Identifier("address")]
         [Identifier("source")]
         public abstract IPAddress Source { get; }
+        [Identifier("address")]
         [Identifier("dest")]
         public abstract IPAddress Destination { get; }
 
         protected IPAddress ParseIPAddress(int offset)
-            => new IPAddress(Segment
+            => new IPAddress(Data
                 .Slice(offset,
                     Version == IPVersion.IPv4
                         ? 0x04
                     : Version == IPVersion.IPv6
                         ? 0x10
-                    : throw new InvalidOperationException())
-                .Span);
+                    : throw new InvalidOperationException()).Span);
         
-        protected IPPacket(ReadOnlyMemory<byte> segment)
-            : base(segment)
+        protected IPPacket(ReadOnlyMemory<byte> data)
+            : base(data)
         { }
     }
 
     public abstract class InternetPacket : Packet
     { 
-        protected InternetPacket(ReadOnlyMemory<byte> segment)
-            : base(segment)
+        protected InternetPacket(ReadOnlyMemory<byte> data)
+            : base(data)
         { }
     }
 
@@ -300,13 +462,15 @@ namespace Arbitrary.Scalpel
         private const int SourceOffset = AddressLength;
         private const int TypeOffset = AddressLength * 2;
         private const int HeaderLength = TypeOffset + sizeof(EthernetType);
+        protected override int MinimumHeaderLength => HeaderLength;
 
+        [Identifier("address")]
         [Identifier("source")]
         public PhysicalAddress Source 
         { 
             get
             {
-                var bytes = Segment
+                var bytes = Data
                     .Slice(SourceOffset, AddressLength)
                     .ToArray();
                 Array.Reverse(bytes);
@@ -314,12 +478,13 @@ namespace Arbitrary.Scalpel
             }
         }
 
+        [Identifier("address")]
         [Identifier("dest")]
         public PhysicalAddress Destination 
         { 
             get
             {
-                var bytes = Segment
+                var bytes = Data
                     .Slice(DestinationOffset, AddressLength)
                     .ToArray();
                 Array.Reverse(bytes);
@@ -331,25 +496,25 @@ namespace Arbitrary.Scalpel
         public EthernetType Type 
         { 
             get => (EthernetType)(BitConverter
-                .ToUInt16(Segment
-                    .Slice(TypeOffset, sizeof(EthernetType))
-                    .Span)
+                .ToUInt16(Data
+                    .Slice(TypeOffset).Span)
                 .ByteSwap());
         }
 
-        public EthernetPacket(ReadOnlyMemory<byte> segment)
-            : base(segment)
+        public EthernetPacket(ReadOnlyMemory<byte> data)
+            : base(data)
         { }
     }
 
     public abstract class Packet
     {
-        protected readonly ReadOnlyMemory<byte> Segment;
+        protected abstract int MinimumHeaderLength { get; }
+        protected readonly ReadOnlyMemory<byte> Data;
 
-        protected Packet(ReadOnlyMemory<byte> segment)
-        {
-            Segment = segment;
-        }
+        protected Packet(ReadOnlyMemory<byte> data)
+            => Data = data.Length < MinimumHeaderLength
+                ? throw new ArgumentException(nameof(data))
+                : data;
 
         public static Packet Parse(LinkLayer link_layer, byte[] data)
         {
