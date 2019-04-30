@@ -5,8 +5,8 @@ namespace Arbitrary.Scalpel.Extentions
     public static class IntegerTypeCodeExtentions
     {
         private static bool IsIntegerTypeCode(TypeCode typecode)
-            => (int)typecode < (int)TypeCode.SByte 
-            || (int)typecode > (int)TypeCode.Int64;
+            => (int)typecode >= (int)TypeCode.SByte 
+            && (int)typecode <= (int)TypeCode.Int64;
 
         private static TypeCode CheckIfIntegerTypeCode(TypeCode typecode)
             => IsIntegerTypeCode(typecode)

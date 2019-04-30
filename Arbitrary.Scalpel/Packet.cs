@@ -42,7 +42,6 @@ namespace Arbitrary.Scalpel
     {
         None =  0x0000,
         Loop =  0x0060,
-        Echo =  0x0200,
         IPv4 =  0x0800,
         ARP =   0x0806,
         IPv6 =  0x86dd,
@@ -61,7 +60,7 @@ namespace Arbitrary.Scalpel
         ICMP =                                  0x01,
         IPv4 =                                  0x04,
         TCP =                                   0x06,
-        UCP =                                   0x11,
+        UDP =                                   0x11,
         IPv6 =                                  0x29,
         [Identifier("ipv6_routing")]
         IPv6RoutingHeader =                     0x2b,
@@ -161,9 +160,15 @@ namespace Arbitrary.Scalpel
                 .ByteSwap();
         }
 
-        public UDPPacket(ReadOnlyMemory<byte> data)
-            : base(data)
-        { }
+        public UDPPacket(
+            ReadOnlyMemory<byte> data,
+            Packet parent)
+            : base(data, parent)
+        { 
+            if (data.Length <= MinimumHeaderLength)
+                return;
+            PayloadData = Data.Slice(0x08);
+        }
     }
 
     public sealed class TCPPacket : TransportPacket
@@ -250,9 +255,16 @@ namespace Arbitrary.Scalpel
                 .ByteSwap();
         }
 
-        public TCPPacket(ReadOnlyMemory<byte> data)
-            : base(data)
-        { }
+        public TCPPacket(
+            ReadOnlyMemory<byte> data,
+            Packet parent)
+            : base(data, parent)
+        {
+            var header_length = HeaderLength;
+            if (data.Length <= header_length)
+                return;
+            var PayloadData = data.Slice(header_length);
+        }
     }
 
     public abstract class TransportPacket : Packet
@@ -266,8 +278,10 @@ namespace Arbitrary.Scalpel
         [Identifier("checksum")]
         public abstract ushort Checksum { get; }
 
-        protected TransportPacket(ReadOnlyMemory<byte> data)
-            : base(data)
+        protected TransportPacket(
+            ReadOnlyMemory<byte> data,
+            Packet parent)
+            : base(data, parent)
         { }
     }
 
@@ -315,9 +329,15 @@ namespace Arbitrary.Scalpel
                 .ByteSwap();
         }
 
-        public ICMPv4Packet(ReadOnlyMemory<byte> data)
-            : base(data)
-        { }
+        public ICMPv4Packet(
+            ReadOnlyMemory<byte> data,
+            Packet parent = null)
+            : base(data, parent)
+        { 
+            if (data.Length <= MinimumHeaderLength)
+                return;
+            PayloadData = Data.Slice(0x08);
+        }
     }
 
     [Identifier("ipv4")]
@@ -327,7 +347,7 @@ namespace Arbitrary.Scalpel
 
         public override int HeaderLength
         {
-            get => InternetHeaderLength<<2;
+            get => InternetHeaderLength * sizeof(int);
         }
         [Identifier("ihl")]
         public byte InternetHeaderLength 
@@ -385,22 +405,42 @@ namespace Arbitrary.Scalpel
         }
         public override IPAddress Source 
         {
-            get => new IPAddress(BitConverter
-                .ToInt32(Data
-                    .Slice(0x0c).Span));
+            get => ParseIPAddress(0x0c);
+            // get => new IPAddress(BitConverter
+            //     .ToInt32(Data
+            //         .Slice(0x0c).Span));
         }
         public override IPAddress Destination 
         {
-            get => new IPAddress(BitConverter
-                .ToInt32(Data
-                    .Slice(0x10).Span));
+            get => ParseIPAddress(0x10);
+            // get => new IPAddress(BitConverter
+            //     .ToInt32(Data
+            //         .Slice(0x10).Span));
         }
         
-        public IPv4Packet(ReadOnlyMemory<byte> data)
-            : base(data)
-        { 
-            if (data.Length < MinimumHeaderLength)
-                throw new ArgumentException(nameof(data));
+        public IPv4Packet(
+            ReadOnlyMemory<byte> data,
+            Packet parent = null)
+            : base(data, parent)
+        {
+            var header_length = HeaderLength;
+            if (data.Length <= header_length)
+                return;
+            var PayloadData = data.Slice(header_length);
+            switch (Protocol)
+            {
+                case ProtocolType.ICMP:
+                    Payload = new ICMPv4Packet(PayloadData, this);
+                    return;
+                case ProtocolType.TCP:
+                    Payload = new TCPPacket(PayloadData, this);
+                    return;
+                case ProtocolType.UDP:
+                    Payload = new UDPPacket(PayloadData, this);
+                    return;
+                default:
+                    throw new NotImplementedException();
+            }
         }
     }
 
@@ -442,15 +482,19 @@ namespace Arbitrary.Scalpel
                         ? 0x10
                     : throw new InvalidOperationException()).Span);
         
-        protected IPPacket(ReadOnlyMemory<byte> data)
-            : base(data)
+        protected IPPacket(
+            ReadOnlyMemory<byte> data, 
+            Packet parent = null)
+            : base(data, parent)
         { }
     }
 
     public abstract class InternetPacket : Packet
     { 
-        protected InternetPacket(ReadOnlyMemory<byte> data)
-            : base(data)
+        protected InternetPacket(
+            ReadOnlyMemory<byte> data, 
+            Packet parent = null)
+            : base(data, parent)
         { }
     }
 
@@ -501,20 +545,42 @@ namespace Arbitrary.Scalpel
                 .ByteSwap());
         }
 
-        public EthernetPacket(ReadOnlyMemory<byte> data)
-            : base(data)
-        { }
+        public EthernetPacket(
+            ReadOnlyMemory<byte> data, 
+            Packet parent = null)
+            : base(data, parent)
+        { 
+            if (data.Length <= MinimumHeaderLength)
+                return;
+            PayloadData = data.Slice(0x0e);
+            // we'll end up doing this twice arrrg
+            switch (Type)
+            {
+                case EthernetType.IPv4:
+                    Payload = new IPv4Packet(PayloadData, this);
+                    return;
+                default:
+                    throw new NotImplementedException();
+            }
+        }
     }
 
     public abstract class Packet
     {
         protected abstract int MinimumHeaderLength { get; }
-        protected readonly ReadOnlyMemory<byte> Data;
+        public readonly ReadOnlyMemory<byte> Data;
+        public readonly Packet Parent;
+        public virtual Packet Payload { get; protected set; }
+        public virtual ReadOnlyMemory<byte> PayloadData 
+            { get; protected set; }
 
-        protected Packet(ReadOnlyMemory<byte> data)
-            => Data = data.Length < MinimumHeaderLength
+        protected Packet(ReadOnlyMemory<byte> data, Packet parent = null)
+        {
+            Data = data.Length < MinimumHeaderLength
                 ? throw new ArgumentException(nameof(data))
                 : data;
+            Parent = parent;
+        }
 
         public static Packet Parse(LinkLayer link_layer, byte[] data)
         {
