@@ -1,4 +1,5 @@
 $ tcp_syn
+# Logs TCP SYN probes.
 | tcp.flags.all == tcp.flags.syn
 : ipv4.source
 : tcp.source
