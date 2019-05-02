@@ -66,8 +66,8 @@ namespace Arbitrary.Scalpel.Compiler
 
     public enum TokenType
     {
-        OpenParens,
         CloseParens,
+        OpenParens,
         Title,
         Selection,
         Name,
@@ -80,10 +80,10 @@ namespace Arbitrary.Scalpel.Compiler
     
     public readonly struct Token
     {
-        private readonly TokenType Type;
-        private readonly KernelSource Source;
-        private readonly int Offset;
-        private readonly int Length;
+        public readonly TokenType Type;
+        public readonly KernelSource Source;
+        public readonly int Offset;
+        public readonly int Length;
     
         private Token(
             TokenType type, 
@@ -100,8 +100,8 @@ namespace Arbitrary.Scalpel.Compiler
                 ? throw new ArgumentOutOfRangeException(nameof(length))
                 : length;
         }
-        public static implicit operator TokenType(Token token)
-            => token.Type;
+        // public static implicit operator TokenType(Token token)
+        //     => token.Type;
         public static implicit operator ReadOnlySpan<char>(Token token)
             => token.Source.Buffer.Span
                 .Slice(token.Offset, token.Length);
@@ -116,6 +116,8 @@ namespace Arbitrary.Scalpel.Compiler
                 value.Item2, 
                 value.Item3, 
                 value.Item4);
+        public override string ToString()
+            => Source.Buffer.Span.ToString();
     }
 
     public class Lexer : IEnumerable<Token>
@@ -309,8 +311,6 @@ namespace Arbitrary.Scalpel.Compiler
 
         private IEnumerable<Token> EnumerateTokens()
         {
-            
-            throw new NotImplementedException();
             var buffer = Source.Buffer.Span;
             
             TrimStart(buffer);
@@ -375,8 +375,8 @@ namespace Arbitrary.Scalpel.Compiler
                 {
                     throw new NotImplementedException();
                 }
+                throw new LexerException("Unexpected character", this);
             }
-            
             yield break;
         }
 
