@@ -84,7 +84,7 @@ namespace Arbitrary.Scalpel.Compiler
         public UnaryOperationSyntax(UnaryOperationType type, T operand)
         {
             Type = type;
-            Operand = operand is null
+            Operand = operand == null
                 ? throw new ArgumentNullException(nameof(operand))
                 : operand;
         }
@@ -111,10 +111,10 @@ namespace Arbitrary.Scalpel.Compiler
             if (left_operand is ILiteral && right_operand is ILiteral)
                 throw new InvalidOperationException();
             Type = type;
-            LeftOperand = left_operand is null
+            LeftOperand = left_operand == null
                 ? throw new ArgumentNullException(nameof(left_operand))
                 : left_operand;
-            RightOperand = right_operand is null
+            RightOperand = right_operand == null
                 ? throw new ArgumentNullException(nameof(right_operand))
                 : right_operand;
         }
@@ -211,7 +211,7 @@ namespace Arbitrary.Scalpel.Compiler
                 IdentifierBody.ManyString());
 
         private static readonly Parser<char, IPredicate> Name =
-            Identifier.Separated(Char('.'))
+            Tok(Identifier.SeparatedAtLeastOnce(Char('.')))
                 .Select(ids => new NameSyntax(ids) as IPredicate);
 
         private static readonly Parser<char, Unit> LineComment =
@@ -223,7 +223,9 @@ namespace Arbitrary.Scalpel.Compiler
             TitlePrefix
                 .Between(SkipWhitespaces)
                 .Then(Identifier, (c, id) 
-                    => new TitleSyntax(id));
+                    => new TitleSyntax(id))
+                .Before(Whitespace
+                    .SkipUntil(EndOfLine));
 
         private static readonly Parser<char, SelectorSyntax> Selector =
             SelectionPrefix
@@ -237,11 +239,13 @@ namespace Arbitrary.Scalpel.Compiler
                 OpenParens.Before(SkipWhitespaces), 
                 CloseParens.Before(SkipWhitespaces));
 
-        private static Parser<char, Func<IPredicate, IPredicate, IPredicate>> 
+        private static Parser<
+            char, Func<IPredicate, IPredicate, IPredicate>> 
             BinaryOperation(Parser<char, BinaryOperationType> op)
             => op.Select<Func<IPredicate, IPredicate, IPredicate>>(
                 t => (a, b) => 
-                    new BinaryOperationSyntax<IPredicate, IPredicate>(t, a, b));
+                    new BinaryOperationSyntax<IPredicate, IPredicate>(
+                        t, a, b));
         private static Parser<char, Func<IPredicate, IPredicate>> 
             UnaryOperation(Parser<char, UnaryOperationType> op)
             => op.Select<Func<IPredicate, IPredicate>>(
@@ -307,22 +311,21 @@ namespace Arbitrary.Scalpel.Compiler
             IntegerLiteral.Or(StringLiteral);
 
         private static readonly Parser<char, IPredicate> Predicate =
-            Char('|').Between(SkipWhitespaces).Optional().Then(
-                ExpressionParser.Build(
-                    p => (OneOf(Name, Parenthesised(p))),
-                    new []
-                    {
-                        Operator.Prefix(NotOperation),
-                        Operator.InfixL(LessThanOperation)
-                            .And(Operator.InfixL(GreaterThanOperation))
-                            .And(Operator.InfixL(LessThanOrEqualOperation))
-                            .And(Operator.InfixL(
-                                GreaterThanOrEqualOperation)),
-                        Operator.InfixL(EqualOperation)
-                            .And(Operator.InfixL(NotEqualOperation)),
-                        Operator.InfixL(AndOperation),
-                        Operator.InfixL(OrOperation),
-                    }));
+            Tok("|").Optional().Then(ExpressionParser.Build(
+                p => (OneOf(Name, Parenthesised(p))),
+                new []
+                {
+                    Operator.Prefix(NotOperation),
+                    Operator.InfixL(LessThanOperation)
+                        .And(Operator.InfixL(GreaterThanOperation))
+                        .And(Operator.InfixL(LessThanOrEqualOperation))
+                        .And(Operator.InfixL(
+                            GreaterThanOrEqualOperation)),
+                    Operator.InfixL(EqualOperation)
+                        .And(Operator.InfixL(NotEqualOperation)),
+                    Operator.InfixL(AndOperation),
+                    Operator.InfixL(OrOperation),
+                }));
         
         private static readonly Parser<char, KernelSyntax> Kernel =
             Map((t, p, s) => new KernelSyntax(t, p, s),
@@ -335,7 +338,6 @@ namespace Arbitrary.Scalpel.Compiler
         public ScalpelParser(string source)
         {
             ParserResult = Kernel.ParseOrThrow(source);
-
         }
     }
 }

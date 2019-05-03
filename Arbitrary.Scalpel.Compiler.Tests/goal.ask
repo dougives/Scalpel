@@ -1,0 +1,6 @@
+$ tcp_syn
+# comment
+| tcp.flags.all == tcp.flags.syn
+: ipv4.source
+: tcp.source
+: tcp.dest

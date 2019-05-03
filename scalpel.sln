@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arbitrary.Scalpel", "Arbitr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arbitrary.Scalpel.Compiler", "Arbitrary.Scalpel.Compiler\Arbitrary.Scalpel.Compiler.csproj", "{9083F98B-7641-4F56-8FE2-1F39D1D4264B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arbitrary.Scalpel.Compiler.Tests", "Arbitrary.Scalpel.Compiler.Tests\Arbitrary.Scalpel.Compiler.Tests.csproj", "{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -44,5 +46,17 @@ Global
 		{9083F98B-7641-4F56-8FE2-1F39D1D4264B}.Release|x64.Build.0 = Release|Any CPU
 		{9083F98B-7641-4F56-8FE2-1F39D1D4264B}.Release|x86.ActiveCfg = Release|Any CPU
 		{9083F98B-7641-4F56-8FE2-1F39D1D4264B}.Release|x86.Build.0 = Release|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Debug|x64.Build.0 = Debug|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Debug|x86.Build.0 = Debug|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Release|x64.ActiveCfg = Release|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Release|x64.Build.0 = Release|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Release|x86.ActiveCfg = Release|Any CPU
+		{A63183A8-18EF-44A8-B71C-2B4DA154BD8B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
