@@ -313,6 +313,7 @@ namespace Arbitrary.Scalpel.Compiler
             IntegerLiteral.Or(StringLiteral);
 
         private static readonly Parser<char, IPredicate> Predicate =
+            SkipWhitespaces.Then(
             Tok("||").Optional().Then(ExpressionParser.Build(
                 p => (OneOf(Name, Parenthesised(p))),
                 new []
@@ -327,7 +328,7 @@ namespace Arbitrary.Scalpel.Compiler
                         .And(Operator.InfixL(NotEqualOperation)),
                     Operator.InfixL(AndOperation),
                     Operator.InfixL(OrOperation),
-                }));
+                })));
         
         private static readonly Parser<char, KernelSyntax> Kernel =
             Map((t, p, s) => new KernelSyntax(t, p, s),
