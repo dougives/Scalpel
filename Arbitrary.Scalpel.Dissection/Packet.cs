@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
-using Arbitrary.Scalpel.Extentions;
+using Arbitrary.Scalpel.Dissection.Extentions;
 
-namespace Arbitrary.Scalpel
+namespace Arbitrary.Scalpel.Dissection
 {
     [AttributeUsage(0
         | AttributeTargets.Class

@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Pidgin;
 using Pidgin.Expression;
 using static Pidgin.Parser;
@@ -180,7 +182,7 @@ namespace Arbitrary.Scalpel.Compiler
             && Selectors.SequenceEqual(o.Selectors);
     }
 
-    public class ScalpelParser
+    public static class ScalpelParser
     {
 
         private static readonly Parser<char, char> TitlePrefix = 
@@ -254,12 +256,12 @@ namespace Arbitrary.Scalpel.Compiler
         private static readonly Parser<
             char, Func<IPredicate, IPredicate, IPredicate>> 
             OrOperation = BinaryOperation(
-                Tok("|").ThenReturn(
+                Tok("||").ThenReturn(
                     BinaryOperationType.Or));
         private static readonly Parser<
             char, Func<IPredicate, IPredicate, IPredicate>> 
             AndOperation = BinaryOperation(
-                Tok("&").ThenReturn(
+                Tok("&&").ThenReturn(
                     BinaryOperationType.And));
         private static readonly Parser<
             char, Func<IPredicate, IPredicate, IPredicate>> 
@@ -311,7 +313,7 @@ namespace Arbitrary.Scalpel.Compiler
             IntegerLiteral.Or(StringLiteral);
 
         private static readonly Parser<char, IPredicate> Predicate =
-            Tok("|").Optional().Then(ExpressionParser.Build(
+            Tok("||").Optional().Then(ExpressionParser.Build(
                 p => (OneOf(Name, Parenthesised(p))),
                 new []
                 {
@@ -333,11 +335,19 @@ namespace Arbitrary.Scalpel.Compiler
                 Predicate, 
                 Selector.AtLeastOnce());
 
-        public readonly KernelSyntax ParserResult;
+        //public readonly KernelSyntax ParserResult;
 
-        public ScalpelParser(string source)
-        {
-            ParserResult = Kernel.ParseOrThrow(source);
-        }
+        // public ScalpelParser(string source)
+        // {
+        //     ParserResult = Kernel.ParseOrThrow(source);
+        // }
+
+        public static KernelSyntax ParseFromString(string source)
+            => Kernel.ParseOrThrow(source);
+        public static KernelSyntax ParseFromFile(string path)
+            => ParseFromString(File.ReadAllText(path));
+        async public static Task<KernelSyntax> ParseFromFileAsync(
+            string path)
+            => ParseFromString(await File.ReadAllTextAsync(path));
     }
 }

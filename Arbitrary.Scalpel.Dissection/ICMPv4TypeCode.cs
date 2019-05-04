@@ -1,7 +1,7 @@
 using System;
-using Arbitrary.Scalpel.Extentions;
+using Arbitrary.Scalpel.Dissection.Extentions;
 
-namespace Arbitrary.Scalpel
+namespace Arbitrary.Scalpel.Dissection
 {
     public readonly ref struct ICMPv4TypeCode
     {

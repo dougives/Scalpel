@@ -1,6 +1,6 @@
 using System;
 
-namespace Arbitrary.Scalpel.Extentions
+namespace Arbitrary.Scalpel.Dissection.Extentions
 {
     public static class IntegerTypeCodeExtentions
     {

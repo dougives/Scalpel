@@ -28,8 +28,7 @@ namespace Arbitrary.Scalpel.Compiler.Tests
         public void ParseTest()
         {
             WaitForDebugger();
-            var source = File.ReadAllText("test.ask");
-            var parser = new ScalpelParser(source);
+            var syntax = ScalpelParser.ParseFromFile("test.ask");
             Assert.Pass();
         }
     }

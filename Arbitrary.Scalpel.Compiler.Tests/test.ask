@@ -1,5 +1,7 @@
 $ tcp_syn
-| tcp.flags.all == tcp.flags.syn
+
+tcp.flags.all == tcp.flags.syn
+
 : ipv4.source
 : tcp.source
 : tcp.dest
