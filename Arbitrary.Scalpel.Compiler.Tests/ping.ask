@@ -1,0 +1,6 @@
+$ icmp_ping
+
+icmp.typecode == icmp.typecode.echo_request
+
+: ip.source
+: icmp.payload

@@ -571,6 +571,7 @@ namespace Arbitrary.Scalpel.Dissection
         public readonly ReadOnlyMemory<byte> Data;
         public readonly Packet Parent;
         public virtual Packet Payload { get; protected set; }
+        [Identifier("payload")]
         public virtual ReadOnlyMemory<byte> PayloadData 
             { get; protected set; }
 
