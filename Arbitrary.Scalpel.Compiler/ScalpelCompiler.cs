@@ -16,6 +16,9 @@ namespace Arbitrary.Scalpel.Compiler
 
     public class ScalpelProgram
     {
+        private static readonly IReadOnlyDictionary<string, Type>
+            SymbolTypeMap;
+
         private readonly Dictionary<string, SymbolState> Symbols =
             new Dictionary<string, SymbolState>();
 
@@ -64,12 +67,22 @@ namespace Arbitrary.Scalpel.Compiler
             {
                 if (Kernels.ContainsKey(kernel.Title))
                     throw new InvalidOperationException(nameof(kernel));
+                foreach (var symbol in kernel.AllSymbols)
+                    AddSymbol(
+                        symbol,
+                        kernel.PredicateSymbols.Contains(symbol),
+                        kernel.SelectionSymbols.Contains(symbol));
             }
+        }
+
+        private void Cycle(Packet packet)
+        {
         }
 
         public ScalpelProgram(IEnumerable<ScalpelKernel> kernels)
         {
-            throw new NotImplementedException();
+            foreach (var kernel in kernels)
+                AddKernel(kernel);
         }
     }
 
@@ -77,11 +90,11 @@ namespace Arbitrary.Scalpel.Compiler
     {
         public readonly string Title;
         
-        private readonly Predicate<Dictionary<string, SymbolState>> 
+        public readonly Predicate<Dictionary<string, SymbolState>> 
             Predicate;
-        private readonly HashSet<string> PredicateSymbols;
-        private readonly HashSet<string> SelectionSymbols;
-        private readonly HashSet<string> DifferenceSymbols;
+        public readonly HashSet<string> PredicateSymbols;
+        public readonly HashSet<string> SelectionSymbols;
+        public readonly HashSet<string> AllSymbols;
 
         private ScalpelKernel(KernelSyntax syntax)
         {
@@ -123,8 +136,8 @@ namespace Arbitrary.Scalpel.Compiler
             SelectionSymbols = new HashSet<string>(
                 syntax.Selectors.Select(s => JoinName(s.Name)));
 
-            DifferenceSymbols = new HashSet<string>(
-                PredicateSymbols.Except(SelectionSymbols));
+            AllSymbols = new HashSet<string>(
+                PredicateSymbols.Union(SelectionSymbols));
 
             Predicate<Dictionary<string, SymbolState>> CompilePredicate(
                 IPredicate predicate)
