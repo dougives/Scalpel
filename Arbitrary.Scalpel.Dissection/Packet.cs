@@ -7,23 +7,6 @@ using Arbitrary.Scalpel.Dissection.Extentions;
 
 namespace Arbitrary.Scalpel.Dissection
 {
-    [AttributeUsage(0
-        | AttributeTargets.Class
-        | AttributeTargets.Property
-        | AttributeTargets.Field, 
-        AllowMultiple = true)]
-    public class Identifier : Attribute
-    {
-        public readonly string Text;
-        public Identifier(string text)
-            => Text = string.IsNullOrWhiteSpace(text)
-                ? throw new ArgumentException(nameof(text))
-                : text;
-    }
-    [AttributeUsage(AttributeTargets.Enum, AllowMultiple = false)]
-    public class IdentifierAuto : Attribute
-    { }
-
     [IdentifierAuto]
     public enum LinkLayer : byte
     {
@@ -97,10 +80,10 @@ namespace Arbitrary.Scalpel.Dissection
     {
         [Identifier("zero")]
         Zero =              0b000,
-        [Identifier("dont_frag")]
-        DontFragment =      0b001,
         [Identifier("more_frags")]
-        MoreFragments =     0b010,
+        MoreFragments =     0b001,
+        [Identifier("dont_frag")]
+        DontFragment =      0b010,
         [Identifier("evil")]
         Evil =              0b100,
     }
@@ -125,6 +108,7 @@ namespace Arbitrary.Scalpel.Dissection
         All =       0b111_111111111,
     }
 
+    [Identifier("udp")]
     public sealed class UDPPacket : TransportPacket
     {
         protected override int MinimumHeaderLength => 0x08;
@@ -171,6 +155,7 @@ namespace Arbitrary.Scalpel.Dissection
         }
     }
 
+    [Identifier("tcp")]
     public sealed class TCPPacket : TransportPacket
     {
         protected override int MinimumHeaderLength => 0x14;
@@ -226,6 +211,7 @@ namespace Arbitrary.Scalpel.Dissection
             get => (TCPFlags)(BitConverter
                 .ToUInt16(Data
                     .Slice(0x0c).Span)
+                .ByteSwap()
                 & (ushort)TCPFlags.All);
         }
 
@@ -588,11 +574,12 @@ namespace Arbitrary.Scalpel.Dissection
             switch (link_layer)
             {
                 case LinkLayer.Ethernet:
+                    return new EthernetPacket(
+                        new ReadOnlyMemory<byte>(data));
                 case LinkLayer.Raw:
                 default:
                     throw new NotImplementedException(nameof(link_layer));
             }
-            return null;
         }
     }
 }

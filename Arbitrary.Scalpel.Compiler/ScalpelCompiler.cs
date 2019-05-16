@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reflection;
 using Arbitrary.Scalpel.Dissection;
 
 namespace Arbitrary.Scalpel.Compiler
@@ -16,8 +17,131 @@ namespace Arbitrary.Scalpel.Compiler
 
     public class ScalpelProgram
     {
-        private static readonly IReadOnlyDictionary<string, Type>
-            SymbolTypeMap;
+        private static readonly IReadOnlyDictionary<string, HashSet<object>>
+            SymbolMap;
+
+        private static IReadOnlyDictionary<string, HashSet<object>>
+            BuildSymbolMap()
+        {
+            var symbol_map = 
+                new Dictionary<string, HashSet<object>>();
+
+            void AddSymbolMapEntry(string key, object value)
+            {                    
+                if (symbol_map.ContainsKey(key))
+                    {
+                        symbol_map[key].Add(value);
+                        return;
+                    }
+                    symbol_map.Add(
+                        key, 
+                        new HashSet<object>( new [] { value }));
+            }
+
+            var packet_assembly = Assembly.GetAssembly(typeof(Packet));
+            foreach (var packet_type in packet_assembly.GetTypes()
+                .Where(t => typeof(Packet).IsAssignableFrom(t)))
+            {
+                var packet_ids = packet_type
+                    .GetCustomAttributes<Identifier>(true);
+                if (!packet_ids.Any())
+                    continue;
+                foreach (var packet_id in packet_ids.Select(id => id.Text))
+                {
+                    AddSymbolMapEntry(packet_id, packet_type);
+
+                    var props = packet_type.GetProperties();
+                    foreach (var prop in props)
+                    {
+                        var prop_ids = prop
+                            .GetCustomAttributes<Identifier>(true);
+                        if (!prop_ids.Any())
+                            continue;
+                        foreach (var prop_id in prop_ids
+                            .Select(id => id.Text))
+                        {
+                            var symbol = string
+                                .Join('.', packet_id, prop_id);
+                            
+                            // if prop is an enum, add the enum symbols
+                            // this is kind of a disaster
+                            if (typeof(Enum)
+                                .IsAssignableFrom(prop.PropertyType))
+                            {
+                                var fields = prop.PropertyType
+                                    .GetFields()
+                                    .ToHashSet();
+                                foreach (var field in fields)
+                                {
+                                    var field_ids = field
+                                        .GetCustomAttributes<Identifier>();
+                                    if (!field_ids.Any())
+                                        continue;
+                                    foreach (var field_id in field_ids
+                                        .Select(id => id.Text))
+                                    {
+                                        var enum_symbol = string
+                                            .Join('.', symbol, field_id);
+                                        AddSymbolMapEntry(
+                                            enum_symbol,
+                                            field);
+                                    }
+                                }
+                                var has_auto_id = prop.PropertyType
+                                    .GetCustomAttribute<IdentifierAuto>();
+                                if (has_auto_id != null)
+                                {
+                                    var auto_fields = fields.Except(
+                                        fields.Where(f
+                                            => f.GetCustomAttributes<
+                                                Identifier>()
+                                                .Any()));
+                                    foreach (var field in auto_fields)
+                                    {
+                                        var enum_symbol = string
+                                            .Join('.', 
+                                                symbol, 
+                                                field.Name.ToLower());
+                                        AddSymbolMapEntry(
+                                            enum_symbol,
+                                            field);
+                                    }
+                                }
+                            }
+
+                            // if prop is HierarchicalEnum, add all of it
+                            var has_hierarchical_enum = prop.PropertyType
+                                .GetCustomAttribute<HierarchicalEnum>(true);
+                            if (has_hierarchical_enum != null)
+                            {
+                                throw new NotImplementedException();
+                                // IEnumerable<(string, object)>
+                                //     EnumerateHierarchy(
+                                //         string base_symbol, 
+                                //         Type type)
+                                // {
+                                //     var children = type.GetNestedTypes(
+                                //         BindingFlags.Public
+                                //         | BindingFlags.Static);
+                                //     foreach (var child in children)
+                                //     {
+                                //         foreach (var 
+                                //     }
+                                // }
+                            }
+
+                            AddSymbolMapEntry(symbol, prop);
+                        }
+                    }
+                }
+            }
+            return symbol_map;
+        }
+
+        static ScalpelProgram()
+        {
+            SymbolMap = BuildSymbolMap();
+        }
 
         private readonly Dictionary<string, SymbolState> Symbols =
             new Dictionary<string, SymbolState>();
@@ -62,7 +186,7 @@ namespace Arbitrary.Scalpel.Compiler
 
         private void AddKernel(ScalpelKernel kernel)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
             lock (Kernels)
             {
                 if (Kernels.ContainsKey(kernel.Title))
@@ -72,18 +196,71 @@ namespace Arbitrary.Scalpel.Compiler
                         symbol,
                         kernel.PredicateSymbols.Contains(symbol),
                         kernel.SelectionSymbols.Contains(symbol));
+                Kernels.Add(kernel.Title, kernel);
             }
         }
 
-        private void Cycle(Packet packet)
+        public void Cycle(Packet packet)
         {
+            IEnumerable<string> PacketLayerIdentifiers()
+            {
+                for (var layer = packet; 
+                    layer != null; 
+                    layer = packet.Parent)
+                {
+                    foreach (var id in layer.GetType()
+                        .GetCustomAttributes<Identifier>(true))
+                        yield return id.Text;
+                }
+            }
+            var packet_layer_ids = 
+                new HashSet<string>(PacketLayerIdentifiers());
+            var relevant_kernels = Kernels.Values
+                .Where(k => k.LayerIdentifiers
+                    .IsSubsetOf(packet_layer_ids));
+            var selected_kernels = relevant_kernels
+                .Where(k => k.Predicate(Symbols));
+            throw new NotImplementedException();
         }
 
         public ScalpelProgram(IEnumerable<ScalpelKernel> kernels)
         {
+            // add layer id's to symbols
+            // this allows a kernel to specify a predicate
+            // that just checks for the existance of a layer.
+            // kernel predicates that don't use the layers
+            // aren't even called by the program cycle.
+            // but it's a little weird since
+            // eth == tcp.flags.syn becomes a valid operation,
+            // equivalent to eth && tcp.flags.syn
+            foreach (var layer_id in SymbolMap.Keys
+                .Where(s => !s.Contains('.')))
+                Symbols.Add(
+                    layer_id,
+                    new SymbolState
+                    {
+                        Name = layer_id,
+                        PredicateCounter = int.MaxValue,
+                        SelectionCounter = int.MaxValue,
+                        Value = true,
+                    });
+
+            // add enum constants
+
+            
             foreach (var kernel in kernels)
                 AddKernel(kernel);
         }
+
+        public static ScalpelProgram FromKernelFiles(
+            IEnumerable<string> paths)
+            => !paths.Any()
+                ? throw new ArgumentException(nameof(paths))
+                : new ScalpelProgram(
+                    paths.Select(p 
+                        => ScalpelKernel.CompileFromFile(p)));
+        public static ScalpelProgram FromKernelFiles(params string[] paths)
+            => FromKernelFiles(paths as IEnumerable<string>);
     }
 
     public class ScalpelKernel
@@ -95,6 +272,7 @@ namespace Arbitrary.Scalpel.Compiler
         public readonly HashSet<string> PredicateSymbols;
         public readonly HashSet<string> SelectionSymbols;
         public readonly HashSet<string> AllSymbols;
+        public readonly HashSet<string> LayerIdentifiers;
 
         private ScalpelKernel(KernelSyntax syntax)
         {
@@ -139,29 +317,36 @@ namespace Arbitrary.Scalpel.Compiler
             AllSymbols = new HashSet<string>(
                 PredicateSymbols.Union(SelectionSymbols));
 
+            LayerIdentifiers = new HashSet<string>(
+                AllSymbols.Select(s => s.Substring(0, s.IndexOf('.'))));
+
             Predicate<Dictionary<string, SymbolState>> CompilePredicate(
                 IPredicate predicate)
             {
                 const string param_name = "symbols";
                 Type param_type = typeof(Dictionary<string, SymbolState>);
+                Type lambda_type = 
+                    typeof(Predicate<Dictionary<string, SymbolState>>);
 
-                var param_var = Expression.Variable(
+                var parameter = Expression.Parameter(
                     param_type,
                     param_name);
 
                 Expression PredicateExpression(IPredicate pe)
                 {
-                    switch (predicate)
+                    switch (pe)
                     {
                         case IntegerLiteralSyntax o:
                             return Expression.Constant(o.Value);
                         case StringLiteralSyntax o:
                             return Expression.Constant(o.Text);
                         case NameSyntax o:
-                            return Expression.Call(
-                                param_var,
-                                param_type.GetMethod("Get"),
-                                Expression.Constant(JoinName(o)));
+                            return Expression.Property( 
+                                Expression.Call(
+                                    parameter,
+                                    param_type.GetMethod("get_Item"),
+                                    Expression.Constant(JoinName(o))),
+                                "Value");
                         case UnaryOperationSyntax<IPredicate> o:
                             switch (o.Type)
                             {
@@ -210,11 +395,8 @@ namespace Arbitrary.Scalpel.Compiler
                     }
                 }
 
-                var parameter = Expression.Parameter(
-                    param_type,
-                    param_name);
                 var lambda = Expression.Lambda(
-                    param_type,
+                    lambda_type,
                     PredicateExpression(predicate),
                     parameter);
 
@@ -227,5 +409,8 @@ namespace Arbitrary.Scalpel.Compiler
 
             Predicate = CompilePredicate(syntax.Predicate);
         }
+
+        public static ScalpelKernel CompileFromFile(string path)
+            => new ScalpelKernel(ScalpelParser.ParseFromFile(path));
     }
 }

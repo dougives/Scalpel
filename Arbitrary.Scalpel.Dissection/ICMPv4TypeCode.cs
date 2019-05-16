@@ -3,6 +3,7 @@ using Arbitrary.Scalpel.Dissection.Extentions;
 
 namespace Arbitrary.Scalpel.Dissection
 {
+    [HierarchicalEnum]
     public readonly ref struct ICMPv4TypeCode
     {
         private readonly ushort Value;
@@ -37,7 +38,7 @@ namespace Arbitrary.Scalpel.Dissection
             public static ICMPv4TypeCode FragmentationNeeded =>         0x0304;
             [Identifier("source_route_failed")]
             public static ICMPv4TypeCode SourceRouteFailed =>           0x0305;
-            [Identifier("net_unkown")]
+            [Identifier("net_unknown")]
             public static ICMPv4TypeCode NetworkUnknown =>              0x0306;
             [Identifier("host_unknown")]
             public static ICMPv4TypeCode HostUnknown =>                 0x0307;

@@ -15,7 +15,7 @@ namespace Arbitrary.Scalpel.Compiler.Tests
             TestContext.Progress.WriteLine(
                 $"Waiting for debugger to attach: " +
                 $"{test_process.ProcessName}:{test_process.Id}");
-            while(!Debugger.IsAttached) 
+            while (!Debugger.IsAttached) 
                 Thread.Sleep(500);
         }
 
@@ -27,7 +27,7 @@ namespace Arbitrary.Scalpel.Compiler.Tests
         [Test]
         public void ParseTest()
         {
-            WaitForDebugger();
+            //WaitForDebugger();
             var syntax = ScalpelParser.ParseFromFile("test.ask");
             Assert.Pass();
         }

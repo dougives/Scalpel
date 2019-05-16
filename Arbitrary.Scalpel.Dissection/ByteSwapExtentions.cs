@@ -11,7 +11,7 @@ namespace Arbitrary.Scalpel.Dissection.Extentions
             var s = Convert.ToUInt64(value);
             var d = 0uL;
             for (var i = 0; i < length; ++i)
-                d |= ((d>>(i<<3))&0xff)<<((length-1-i)<<3);
+                d |= ((s>>(i<<3))&0xff)<<((length-1-i)<<3);
             return unchecked((T)Convert.ChangeType(d, typeof(T)));
         }
     }

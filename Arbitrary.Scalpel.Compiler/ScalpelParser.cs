@@ -184,7 +184,6 @@ namespace Arbitrary.Scalpel.Compiler
 
     public static class ScalpelParser
     {
-
         private static readonly Parser<char, char> TitlePrefix = 
             Char('$');
         private static readonly Parser<char, char> LineCommentPrefix = 
