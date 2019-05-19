@@ -43,7 +43,7 @@ namespace Arbitrary.Scalpel.Compiler.Tests
         [Test]
         public void KernelCompilerTest()
         {
-            WaitForDebugger();
+            // WaitForDebugger();
             var obj = ScalpelKernel.CompileFromFile("test.ask");
             Assert.Pass();
         }
@@ -51,22 +51,22 @@ namespace Arbitrary.Scalpel.Compiler.Tests
         [Test]
         public void BuildProgramTest()
         {
-            WaitForDebugger();
+            // WaitForDebugger();
             var program = ScalpelProgram.FromKernelFiles("test.ask");
             Assert.Pass();
         }
 
-        // [Test]
-        // public void CycleProgramTest()
-        // {
-        //     // WaitForDebugger();
-        //     var program = ScalpelProgram.FromKernelFiles("test.ask");
-        //     var packet = Packet.Parse(
-        //         LinkLayer.Ethernet, 
-        //         EthernetTestPacket);
-        //     var tcp_flags = (packet.Payload.Payload as TCPPacket).Flags;
-        //     program.Cycle(packet);
-        //     Assert.Pass();
-        // }
+        [Test]
+        public void CycleProgramTest()
+        {
+            WaitForDebugger();
+            var program = ScalpelProgram.FromKernelFiles("test.ask");
+            var packet = Packet.Parse(
+                LinkLayer.Ethernet, 
+                EthernetTestPacket);
+            var tcp_flags = (packet.Payload.Payload as TCPPacket).Flags;
+            var output = program.Cycle(packet);
+            Assert.Pass();
+        }
     }
 }

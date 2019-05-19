@@ -114,20 +114,59 @@ namespace Arbitrary.Scalpel.Compiler
                                 .GetCustomAttribute<HierarchicalEnum>(true);
                             if (has_hierarchical_enum != null)
                             {
-                                throw new NotImplementedException();
-                                // IEnumerable<(string, object)>
-                                //     EnumerateHierarchy(
-                                //         string base_symbol, 
-                                //         Type type)
-                                // {
-                                //     var children = type.GetNestedTypes(
-                                //         BindingFlags.Public
-                                //         | BindingFlags.Static);
-                                //     foreach (var child in children)
-                                //     {
-                                //         foreach (var 
-                                //     }
-                                // }
+                                IEnumerable<(string, object)>
+                                    EnumerateHierarchy(
+                                        string base_symbol, 
+                                        Type type)
+                                {
+                                    var names = type
+                                        .GetProperties(
+                                            BindingFlags.Public
+                                            | BindingFlags.Static)
+                                        .Where(t 
+                                            => t.PropertyType 
+                                            == prop.PropertyType);
+                                    foreach (var name in names)
+                                    {
+                                        var name_ids = 
+                                            name.GetCustomAttributes<
+                                                Identifier>(true);
+                                        foreach (var name_id in name_ids)
+                                            yield return (string
+                                                .Join('.',
+                                                    base_symbol,
+                                                    name_id.Text),
+                                                name);
+                                    }
+                                    var children = type.GetNestedTypes(
+                                        BindingFlags.Public
+                                        | BindingFlags.Static);
+                                    foreach (var child in children)
+                                    {
+                                        var child_ids =
+                                            child.GetCustomAttributes<
+                                                Identifier>(true);
+                                        foreach (var child_id in child_ids)
+                                        {
+                                            foreach (var (
+                                                child_name, 
+                                                child_type)
+                                                in EnumerateHierarchy(string
+                                                    .Join('.',
+                                                        base_symbol,
+                                                        child_id.Text),
+                                                    child))
+                                                yield return (
+                                                    child_name,
+                                                    child_type);
+                                        }
+                                    }
+                                }
+                                foreach (var (name, type)
+                                    in EnumerateHierarchy(
+                                        symbol,
+                                        prop.PropertyType))
+                                    AddSymbolMapEntry(name, type);
                             }
 
                             AddSymbolMapEntry(symbol, prop);
@@ -158,6 +197,9 @@ namespace Arbitrary.Scalpel.Compiler
                 throw new ArgumentException(nameof(name));
             if (!is_in_predicate && !is_in_selection)
                 throw new ArgumentException();
+            if (SymbolMap[name].All(v 
+                => typeof(Type).IsAssignableFrom(v.GetType())))
+                return;
 
             // there can be a state where a symbol is added, but the value
             // has not yet been updated before the program calls a kernel.
@@ -200,27 +242,79 @@ namespace Arbitrary.Scalpel.Compiler
             }
         }
 
-        public void Cycle(Packet packet)
+        public IReadOnlyDictionary<
+            string, 
+            IReadOnlyDictionary<string, object>> 
+            Cycle(Packet packet)
         {
-            IEnumerable<string> PacketLayerIdentifiers()
+            IEnumerable<Packet> EnumerateLayers()
             {
                 for (var layer = packet; 
                     layer != null; 
-                    layer = packet.Parent)
-                {
-                    foreach (var id in layer.GetType()
-                        .GetCustomAttributes<Identifier>(true))
-                        yield return id.Text;
-                }
+                    layer = layer.Payload)
+                    yield return layer;
+            }
+            IReadOnlyList<Packet> layers = EnumerateLayers()
+                .ToList();
+
+            IEnumerable<string> LayerIdentifiers(Packet layer)
+            {
+                foreach (var id in layer.GetType()
+                    .GetCustomAttributes<Identifier>(true))
+                    yield return id.Text;
             }
             var packet_layer_ids = 
-                new HashSet<string>(PacketLayerIdentifiers());
+                new HashSet<string>(layers
+                    .SelectMany(LayerIdentifiers));
             var relevant_kernels = Kernels.Values
                 .Where(k => k.LayerIdentifiers
                     .IsSubsetOf(packet_layer_ids));
-            var selected_kernels = relevant_kernels
+            var matched_kernels = relevant_kernels
                 .Where(k => k.Predicate(Symbols));
-            throw new NotImplementedException();
+            object GetSymbolPacketValue(object o)
+            {
+                switch (o)
+                {
+                    case Type _:
+                        return true;
+                    case PropertyInfo pi:
+                        return pi.GetValue(
+                            layers.First(l 
+                                => pi.ReflectedType
+                                    .IsInstanceOfType(l)));
+                    default:
+                        throw new ArgumentException(nameof(o));
+                }
+            }
+            object GetSymbolValues(string symbol)
+            {
+                var range = SymbolMap[symbol];
+                if (range.Count == 1)
+                    return GetSymbolPacketValue(
+                        range.First());
+                return range.Select(GetSymbolPacketValue)
+                    as IReadOnlyCollection<object>;
+            }
+            var selection_set = matched_kernels
+                .SelectMany(k => k.SelectionSymbols)
+                .ToHashSet()
+                .ToDictionary(
+                    s => s,
+                    GetSymbolValues);
+            IReadOnlyDictionary<string, object> MapKernelSelection(
+                ScalpelKernel kernel)
+                {
+                    var mapping = kernel.SelectionSymbols
+                        .ToDictionary(
+                            s => s,
+                            s => selection_set[s]);
+                    //mapping.Add("kernel_title", kernel.Title);
+                    return mapping;
+                }
+            return matched_kernels
+                .ToDictionary(
+                    k => k.Title,
+                    MapKernelSelection);
         }
 
         public ScalpelProgram(IEnumerable<ScalpelKernel> kernels)
@@ -234,7 +328,9 @@ namespace Arbitrary.Scalpel.Compiler
             // eth == tcp.flags.syn becomes a valid operation,
             // equivalent to eth && tcp.flags.syn
             foreach (var layer_id in SymbolMap.Keys
-                .Where(s => !s.Contains('.')))
+                .Where(s 
+                    => SymbolMap[s].All(v 
+                        => typeof(Type).IsAssignableFrom(v.GetType()))))
                 Symbols.Add(
                     layer_id,
                     new SymbolState
@@ -244,9 +340,6 @@ namespace Arbitrary.Scalpel.Compiler
                         SelectionCounter = int.MaxValue,
                         Value = true,
                     });
-
-            // add enum constants
-
             
             foreach (var kernel in kernels)
                 AddKernel(kernel);
@@ -261,156 +354,5 @@ namespace Arbitrary.Scalpel.Compiler
                         => ScalpelKernel.CompileFromFile(p)));
         public static ScalpelProgram FromKernelFiles(params string[] paths)
             => FromKernelFiles(paths as IEnumerable<string>);
-    }
-
-    public class ScalpelKernel
-    {
-        public readonly string Title;
-        
-        public readonly Predicate<Dictionary<string, SymbolState>> 
-            Predicate;
-        public readonly HashSet<string> PredicateSymbols;
-        public readonly HashSet<string> SelectionSymbols;
-        public readonly HashSet<string> AllSymbols;
-        public readonly HashSet<string> LayerIdentifiers;
-
-        private ScalpelKernel(KernelSyntax syntax)
-        {
-            Title = string.IsNullOrWhiteSpace(syntax.Title.Name)
-                ? throw new ArgumentException(nameof(syntax))
-                : syntax.Title.Name;
-
-            string JoinName(NameSyntax name)
-                => string.Join('.', name.Identifiers);
-            
-            IEnumerable<string> FindPredicateSymbols(IPredicate ps)
-            {
-                switch (ps)
-                {
-                    case NameSyntax o:
-                        yield return JoinName(o);
-                        yield break;
-                    case UnaryOperationSyntax<IPredicate> o:
-                        foreach (var p 
-                            in FindPredicateSymbols(o.Operand))
-                            yield return p;
-                            yield break;
-                    case BinaryOperationSyntax<IPredicate, IPredicate> o:
-                        foreach (var p 
-                            in FindPredicateSymbols(o.LeftOperand))
-                            yield return p;
-                        foreach (var p 
-                            in FindPredicateSymbols(o.RightOperand))
-                            yield return p;
-                        yield break;
-                    default:
-                        yield break;
-                }
-            }
-
-            PredicateSymbols = new HashSet<string>(
-                FindPredicateSymbols(syntax.Predicate));
-
-            SelectionSymbols = new HashSet<string>(
-                syntax.Selectors.Select(s => JoinName(s.Name)));
-
-            AllSymbols = new HashSet<string>(
-                PredicateSymbols.Union(SelectionSymbols));
-
-            LayerIdentifiers = new HashSet<string>(
-                AllSymbols.Select(s => s.Substring(0, s.IndexOf('.'))));
-
-            Predicate<Dictionary<string, SymbolState>> CompilePredicate(
-                IPredicate predicate)
-            {
-                const string param_name = "symbols";
-                Type param_type = typeof(Dictionary<string, SymbolState>);
-                Type lambda_type = 
-                    typeof(Predicate<Dictionary<string, SymbolState>>);
-
-                var parameter = Expression.Parameter(
-                    param_type,
-                    param_name);
-
-                Expression PredicateExpression(IPredicate pe)
-                {
-                    switch (pe)
-                    {
-                        case IntegerLiteralSyntax o:
-                            return Expression.Constant(o.Value);
-                        case StringLiteralSyntax o:
-                            return Expression.Constant(o.Text);
-                        case NameSyntax o:
-                            return Expression.Property( 
-                                Expression.Call(
-                                    parameter,
-                                    param_type.GetMethod("get_Item"),
-                                    Expression.Constant(JoinName(o))),
-                                "Value");
-                        case UnaryOperationSyntax<IPredicate> o:
-                            switch (o.Type)
-                            {
-                                case UnaryOperationType.Not:
-                                    return Expression.IsFalse(
-                                        PredicateExpression(o.Operand));
-                                default:
-                                    throw new InvalidOperationException();
-                            }
-                        case BinaryOperationSyntax<IPredicate, IPredicate> o:
-                            switch (o.Type)
-                            {
-                                case BinaryOperationType.Or:
-                                    return Expression.Or(
-                                        PredicateExpression(o.LeftOperand),
-                                        PredicateExpression(o.RightOperand));
-                                case BinaryOperationType.And:
-                                    return Expression.And(
-                                        PredicateExpression(o.LeftOperand),
-                                        PredicateExpression(o.RightOperand));
-                                case BinaryOperationType.NotEqual:
-                                    return Expression.NotEqual(
-                                        PredicateExpression(o.LeftOperand),
-                                        PredicateExpression(o.RightOperand));
-                                case BinaryOperationType.Equal:
-                                    return Expression.Equal(
-                                        PredicateExpression(o.LeftOperand),
-                                        PredicateExpression(o.RightOperand));
-                                case BinaryOperationType.GreaterThanOrEqual:
-                                    return Expression.GreaterThanOrEqual(
-                                        PredicateExpression(o.LeftOperand),
-                                        PredicateExpression(o.RightOperand));
-                                case BinaryOperationType.LessThanOrEqual:
-                                    return Expression.LessThanOrEqual(
-                                        PredicateExpression(o.LeftOperand),
-                                        PredicateExpression(o.RightOperand));
-                                case BinaryOperationType.GreaterThan:
-                                    return Expression.GreaterThan(
-                                        PredicateExpression(o.LeftOperand),
-                                        PredicateExpression(o.RightOperand));
-                                default:
-                                    throw new InvalidOperationException();
-                            }
-                        default:
-                            throw new InvalidOperationException();
-                    }
-                }
-
-                var lambda = Expression.Lambda(
-                    lambda_type,
-                    PredicateExpression(predicate),
-                    parameter);
-
-                while (lambda.CanReduce)
-                    lambda = lambda.ReduceAndCheck() as LambdaExpression;
-
-                return lambda.Compile()
-                    as Predicate<Dictionary<string, SymbolState>>;
-            }
-
-            Predicate = CompilePredicate(syntax.Predicate);
-        }
-
-        public static ScalpelKernel CompileFromFile(string path)
-            => new ScalpelKernel(ScalpelParser.ParseFromFile(path));
     }
 }
